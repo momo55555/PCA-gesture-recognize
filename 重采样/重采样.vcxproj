@@ -76,6 +76,7 @@
     <ClInclude Include="Kinect.hpp" />
     <ClInclude Include="pca.hpp" />
     <ClInclude Include="Recognize.hpp" />
+    <ClInclude Include="Speed.hpp" />
     <ClInclude Include="Train.hpp" />
   </ItemGroup>
   <ItemGroup>

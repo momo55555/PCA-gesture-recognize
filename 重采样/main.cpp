@@ -70,33 +70,30 @@ using namespace std;
 //int main()
 //{
 //	srand(time(0));
-//	readFromFile();
+//	readOriginalFile();
 //	curveMain();	
 //	freopen("C:/Users/rudysnow/Desktop/WaveGes2KeyFrame.txt", "w", stdout);
 //	set<int>::iterator si;
 //	for(si = realKeyFrames.begin(); si != realKeyFrames.end(); si++)
 //	{
-//		cout << *si << " " 
-//			<< oriMove[*si].rightArmUp << " "
-//			<< oriMove[*si].rightArmDown << " "
-//			<< oriMove[*si].betweenArms << " "
-//			<< oriMove[*si].eulerArmUp1 << " "
-//			<< oriMove[*si].eulerArmUp2 << " "
-//			<< oriMove[*si].eulerArmUp3 << " "
-//			<< oriMove[*si].eulerArmDown1 << " "
-//			<< oriMove[*si].eulerArmDown2 << " "
-//			<< oriMove[*si].eulerArmDown3 << endl;
+//		cout << *si << " ";
+//		for(int i = 0; i < 11; ++i)
+//		{
+//			cout << oriMove[*si].angles[i] << " ";
+//		}
+//		cout << oriMove[*si].angles[11] << endl;
 //	}
 //	delete[] c_num;
 //	delete[] pairs;
 //	delete[] cNumTrue;
+//	system("pause");
 //	return 0;
 //}
 
-int main()
-{
-	doPCA();
-	recogGes();
-	system("pause");
-	return 0;
-}
+//int main()
+//{
+//	doPCA();
+//	recogGes();
+//	system("pause");
+//	return 0;
+//}

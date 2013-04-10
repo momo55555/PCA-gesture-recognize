@@ -3,9 +3,7 @@
 
 // 这个头文件只能处理单人采集的骨骼数据，目前没有多人同时采集的需求，所以不添加此功能
 
-#include <time.h>
-#include <set>
-#include "DataProc.hpp"
+#include "Speed.hpp"
 
 /*
     Time: 01-03-2013
@@ -15,191 +13,88 @@
 
 using namespace std;
 
-// 要提取的关键帧帧数
-#define KEY_FRAMES 90
-
-vector<BodyAngles> oriMove;			// 姿态源数据
-vector<int> subset;			// 曲线两点之间的子集点
-set<int> keyFrames;			// 迭代所得关键帧
-set<int> realKeyFrames;		// 对迭代所得的“关键帧”进行进一步插值
-int numOfFrames = 0;			// 当前姿态数据的帧数
-int* pairs;			// 记录分层曲线中各点的连接关系 
-int* c_num;			// 记录已提取作为关键帧的帧信息
-int* cNumTrue;		// 用于迭代时保存原始姿态曲线极值点信息
-float delta = 1.0f;		// 分层曲线算法中判断是否将点加入曲线集合的阈值
-float dDeltaU = 0.1f;	// 阈值的增减幅度
-float dDeltaD = 0.1f;
-int numC;
-
-// 从保存了骨骼夹角数据的文件中读取
-void readFromFile()
-{
-	ifstream fin("C:/Users/rudysnow/Desktop/WaveMove2.txt");
-	numOfFrames = 0;
-	XnFloat a1, a2, a3, x1, y1, z1, x2, y2, z2;
-	while (fin >> a1 >> a2 >> a3 >> x1 >> y1 >> z1 >> x2 >> y2 >> z2)
-	{
-		BodyAngles b;
-
-		b.rightArmUp = a1;
-		b.rightArmDown = a2;
-		b.betweenArms = a3;
-		b.eulerArmUp1 = x1;
-		b.eulerArmUp2 = y1;
-		b.eulerArmUp3 = z1;
-		b.eulerArmDown1 = x2;
-		b.eulerArmDown2 = y2;
-		b.eulerArmDown3 = z2;
-
-		oriMove.push_back(b);
-		++numOfFrames;
-	}
-	fin.close();
-	pairs = new int[numOfFrames];			// 记得要delete！
-	c_num = new int[numOfFrames];
-	cNumTrue = new int[numOfFrames];
-}
-
-// 从保存原始姿态数据的文件中读取并转化为骨骼夹角
-//void readOriginalFile()
-//{
-//	ifstream fin("C:/Users/rudysnow/Desktop/WaveGes2.txt");
-//	numOfFrames = 0;
-//	XnPoint3D torso, head, righthand, rightelbow, rightshoulder;
-//	int flag = 0;
-//	while (true)
-//	{
-//		XnFloat x, y, z;
-//		for (int i = 0; i < 24; ++i)
-//		{
-//			if(!(fin >> x >> y >> z))
-//			{
-//				flag = 1;
-//				break;
-//			}
-//			// 取得当前帧几个关键点的坐标
-//			if (i+1 == XN_SKEL_TORSO)
-//			{
-//				torso.X = x;
-//				torso.Y = y;
-//				torso.Z = z;
-//			}
-//			else if (i+1 == XN_SKEL_HEAD)
-//			{
-//				head.X = x;
-//				head.Y = y;
-//				head.Z = z;
-//			}
-//			else if (i+1 == XN_SKEL_LEFT_HAND)
-//			{
-//				righthand.X = x;
-//				righthand.Y = y;
-//				righthand.Z = z;
-//			}
-//			else if (i+1 == XN_SKEL_LEFT_ELBOW)
-//			{
-//				rightelbow.X = x;
-//				rightelbow.Y = y;
-//				rightelbow.Z = z;
-//			}
-//			else if (i+1 == XN_SKEL_LEFT_SHOULDER)
-//			{
-//				rightshoulder.X = x;
-//				rightshoulder.Y = y;
-//				rightshoulder.Z = z;
-//			}
-//		}
-//		if(flag == 1) break;
-//
-//		// 通过源数据计算右手与身体的夹角
-//		BodyAngles b;
-//		Vector3f root(torso.X - head.X,	torso.Y - head.Y, torso.Z - head.Z);
-//		Vector3f rightArmUp(rightshoulder.X - rightelbow.X,	rightshoulder.Y - rightelbow.Y, rightshoulder.Z - rightelbow.Z);
-//		Vector3f rightArmDown(rightelbow.X - righthand.X, rightelbow.Y - righthand.Y, rightelbow.Z - righthand.Z);
-//		float a1 = angle(rightArmUp, root);
-//		float a2 = angle(rightArmDown, root);
-//		b.rightArmUp = a1;
-//		b.rightArmDown = a2;
-//		oriMove.push_back(b);
-//
-//		numOfFrames++;
-//	}
-//	fin.close();
-//	pairs = new int[numOfFrames];			// 记得要delete！
-//	c_num = new int[numOfFrames];
-//	cNumTrue = new int[numOfFrames];
-//}
-
 // 预处理计算出包含冗余的关键帧集合
 void preProcess()
 {
-	memset(cNumTrue, 0, numOfFrames * sizeof(int));
-
 	int i = 0;
 	cNumTrue[0] = 1;
 	cNumTrue[numOfFrames-1] = 1;
-	numC = 2;
-	
+	numC +=2;
+
 	// 计算曲线在各个分量上的极值点，将这些点组成关键帧
 	for (i = 1; i < numOfFrames-1; ++i)
 	{
-		if ((oriMove[i-1].rightArmUp < oriMove[i].rightArmUp && oriMove[i+1].rightArmUp < oriMove[i].rightArmUp)
-			|| (oriMove[i-1].rightArmUp > oriMove[i].rightArmUp && oriMove[i+1].rightArmUp > oriMove[i].rightArmUp)
-			|| (oriMove[i-1].rightArmDown < oriMove[i].rightArmDown && oriMove[i+1].rightArmDown < oriMove[i].rightArmDown)
-			|| (oriMove[i-1].rightArmDown > oriMove[i].rightArmDown && oriMove[i+1].rightArmDown > oriMove[i].rightArmDown)
-			|| (oriMove[i-1].rightArmUp == oriMove[i].rightArmUp && oriMove[i+1].rightArmUp < oriMove[i].rightArmUp)
-			|| (oriMove[i-1].rightArmUp == oriMove[i].rightArmUp && oriMove[i+1].rightArmUp > oriMove[i].rightArmUp)
-			|| (oriMove[i-1].rightArmUp < oriMove[i].rightArmUp && oriMove[i+1].rightArmUp == oriMove[i].rightArmUp)
-			|| (oriMove[i-1].rightArmUp > oriMove[i].rightArmUp && oriMove[i+1].rightArmUp == oriMove[i].rightArmUp)
-			|| (oriMove[i-1].rightArmDown == oriMove[i].rightArmDown && oriMove[i+1].rightArmDown < oriMove[i].rightArmDown)
-			|| (oriMove[i-1].rightArmDown == oriMove[i].rightArmDown && oriMove[i+1].rightArmDown > oriMove[i].rightArmDown)
-			|| (oriMove[i-1].rightArmDown > oriMove[i].rightArmDown && oriMove[i+1].rightArmDown == oriMove[i].rightArmDown)
-			|| (oriMove[i-1].rightArmDown < oriMove[i].rightArmDown && oriMove[i+1].rightArmDown == oriMove[i].rightArmDown)
-			|| (oriMove[i-1].betweenArms < oriMove[i].betweenArms && oriMove[i+1].betweenArms < oriMove[i].betweenArms)
-			|| (oriMove[i-1].betweenArms > oriMove[i].betweenArms && oriMove[i+1].betweenArms > oriMove[i].betweenArms)
-			|| (oriMove[i-1].betweenArms < oriMove[i].betweenArms && oriMove[i+1].betweenArms == oriMove[i].betweenArms)
-			|| (oriMove[i-1].betweenArms > oriMove[i].betweenArms && oriMove[i+1].betweenArms == oriMove[i].betweenArms)
-			|| (oriMove[i-1].betweenArms == oriMove[i].betweenArms && oriMove[i+1].betweenArms < oriMove[i].betweenArms)
-			|| (oriMove[i-1].betweenArms == oriMove[i].betweenArms && oriMove[i+1].betweenArms > oriMove[i].betweenArms)
-			|| (oriMove[i-1].eulerArmUp1 < oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 < oriMove[i].eulerArmUp1)
-			|| (oriMove[i-1].eulerArmUp1 > oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 > oriMove[i].eulerArmUp1)
-			|| (oriMove[i-1].eulerArmUp1 < oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 == oriMove[i].eulerArmUp1)
-			|| (oriMove[i-1].eulerArmUp1 > oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 == oriMove[i].eulerArmUp1)
-			|| (oriMove[i-1].eulerArmUp1 == oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 < oriMove[i].eulerArmUp1)
-			|| (oriMove[i-1].eulerArmUp1 == oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 > oriMove[i].eulerArmUp1)
-			|| (oriMove[i-1].eulerArmUp2 < oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 < oriMove[i].eulerArmUp2)
-			|| (oriMove[i-1].eulerArmUp2 > oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 > oriMove[i].eulerArmUp2)
-			|| (oriMove[i-1].eulerArmUp2 < oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 == oriMove[i].eulerArmUp2)
-			|| (oriMove[i-1].eulerArmUp2 > oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 == oriMove[i].eulerArmUp2)
-			|| (oriMove[i-1].eulerArmUp2 == oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 < oriMove[i].eulerArmUp2)
-			|| (oriMove[i-1].eulerArmUp2 == oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 > oriMove[i].eulerArmUp2)
-			|| (oriMove[i-1].eulerArmUp3 < oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 < oriMove[i].eulerArmUp3)
-			|| (oriMove[i-1].eulerArmUp3 > oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 > oriMove[i].eulerArmUp3)
-			|| (oriMove[i-1].eulerArmUp3 < oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 == oriMove[i].eulerArmUp3)
-			|| (oriMove[i-1].eulerArmUp3 > oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 == oriMove[i].eulerArmUp3)
-			|| (oriMove[i-1].eulerArmUp3 == oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 < oriMove[i].eulerArmUp3)
-			|| (oriMove[i-1].eulerArmUp3 == oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 > oriMove[i].eulerArmUp3)
-			|| (oriMove[i-1].eulerArmDown1 < oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 < oriMove[i].eulerArmDown1)
-			|| (oriMove[i-1].eulerArmDown1 > oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 > oriMove[i].eulerArmDown1)
-			|| (oriMove[i-1].eulerArmDown1 < oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 == oriMove[i].eulerArmDown1)
-			|| (oriMove[i-1].eulerArmDown1 > oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 == oriMove[i].eulerArmDown1)
-			|| (oriMove[i-1].eulerArmDown1 == oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 < oriMove[i].eulerArmDown1)
-			|| (oriMove[i-1].eulerArmDown1 == oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 > oriMove[i].eulerArmDown1)
-			|| (oriMove[i-1].eulerArmDown2 < oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 < oriMove[i].eulerArmDown2)
-			|| (oriMove[i-1].eulerArmDown2 > oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 > oriMove[i].eulerArmDown2)
-			|| (oriMove[i-1].eulerArmDown2 < oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 == oriMove[i].eulerArmDown2)
-			|| (oriMove[i-1].eulerArmDown2 > oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 == oriMove[i].eulerArmDown2)
-			|| (oriMove[i-1].eulerArmDown2 == oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 < oriMove[i].eulerArmDown2)
-			|| (oriMove[i-1].eulerArmDown2 == oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 > oriMove[i].eulerArmDown2)
-			|| (oriMove[i-1].eulerArmDown3 < oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 < oriMove[i].eulerArmDown3)
-			|| (oriMove[i-1].eulerArmDown3 > oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 > oriMove[i].eulerArmDown3)
-			|| (oriMove[i-1].eulerArmDown3 < oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 == oriMove[i].eulerArmDown3)
-			|| (oriMove[i-1].eulerArmDown3 > oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 == oriMove[i].eulerArmDown3)
-			|| (oriMove[i-1].eulerArmDown3 == oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 < oriMove[i].eulerArmDown3)
-			|| (oriMove[i-1].eulerArmDown3 == oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 > oriMove[i].eulerArmDown3))
+		//if ((oriMove[i-1].rightArmUp < oriMove[i].rightArmUp && oriMove[i+1].rightArmUp < oriMove[i].rightArmUp)
+		//	|| (oriMove[i-1].rightArmUp > oriMove[i].rightArmUp && oriMove[i+1].rightArmUp > oriMove[i].rightArmUp)
+		//	|| (oriMove[i-1].rightArmDown < oriMove[i].rightArmDown && oriMove[i+1].rightArmDown < oriMove[i].rightArmDown)
+		//	|| (oriMove[i-1].rightArmDown > oriMove[i].rightArmDown && oriMove[i+1].rightArmDown > oriMove[i].rightArmDown)
+		//	|| (oriMove[i-1].rightArmUp == oriMove[i].rightArmUp && oriMove[i+1].rightArmUp < oriMove[i].rightArmUp)
+		//	|| (oriMove[i-1].rightArmUp == oriMove[i].rightArmUp && oriMove[i+1].rightArmUp > oriMove[i].rightArmUp)
+		//	|| (oriMove[i-1].rightArmUp < oriMove[i].rightArmUp && oriMove[i+1].rightArmUp == oriMove[i].rightArmUp)
+		//	|| (oriMove[i-1].rightArmUp > oriMove[i].rightArmUp && oriMove[i+1].rightArmUp == oriMove[i].rightArmUp)
+		//	|| (oriMove[i-1].rightArmDown == oriMove[i].rightArmDown && oriMove[i+1].rightArmDown < oriMove[i].rightArmDown)
+		//	|| (oriMove[i-1].rightArmDown == oriMove[i].rightArmDown && oriMove[i+1].rightArmDown > oriMove[i].rightArmDown)
+		//	|| (oriMove[i-1].rightArmDown > oriMove[i].rightArmDown && oriMove[i+1].rightArmDown == oriMove[i].rightArmDown)
+		//	|| (oriMove[i-1].rightArmDown < oriMove[i].rightArmDown && oriMove[i+1].rightArmDown == oriMove[i].rightArmDown)
+		//	|| (oriMove[i-1].betweenArms < oriMove[i].betweenArms && oriMove[i+1].betweenArms < oriMove[i].betweenArms)
+		//	|| (oriMove[i-1].betweenArms > oriMove[i].betweenArms && oriMove[i+1].betweenArms > oriMove[i].betweenArms)
+		//	|| (oriMove[i-1].betweenArms < oriMove[i].betweenArms && oriMove[i+1].betweenArms == oriMove[i].betweenArms)
+		//	|| (oriMove[i-1].betweenArms > oriMove[i].betweenArms && oriMove[i+1].betweenArms == oriMove[i].betweenArms)
+		//	|| (oriMove[i-1].betweenArms == oriMove[i].betweenArms && oriMove[i+1].betweenArms < oriMove[i].betweenArms)
+		//	|| (oriMove[i-1].betweenArms == oriMove[i].betweenArms && oriMove[i+1].betweenArms > oriMove[i].betweenArms)
+		//	|| (oriMove[i-1].eulerArmUp1 < oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 < oriMove[i].eulerArmUp1)
+		//	|| (oriMove[i-1].eulerArmUp1 > oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 > oriMove[i].eulerArmUp1)
+		//	|| (oriMove[i-1].eulerArmUp1 < oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 == oriMove[i].eulerArmUp1)
+		//	|| (oriMove[i-1].eulerArmUp1 > oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 == oriMove[i].eulerArmUp1)
+		//	|| (oriMove[i-1].eulerArmUp1 == oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 < oriMove[i].eulerArmUp1)
+		//	|| (oriMove[i-1].eulerArmUp1 == oriMove[i].eulerArmUp1 && oriMove[i+1].eulerArmUp1 > oriMove[i].eulerArmUp1)
+		//	|| (oriMove[i-1].eulerArmUp2 < oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 < oriMove[i].eulerArmUp2)
+		//	|| (oriMove[i-1].eulerArmUp2 > oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 > oriMove[i].eulerArmUp2)
+		//	|| (oriMove[i-1].eulerArmUp2 < oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 == oriMove[i].eulerArmUp2)
+		//	|| (oriMove[i-1].eulerArmUp2 > oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 == oriMove[i].eulerArmUp2)
+		//	|| (oriMove[i-1].eulerArmUp2 == oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 < oriMove[i].eulerArmUp2)
+		//	|| (oriMove[i-1].eulerArmUp2 == oriMove[i].eulerArmUp2 && oriMove[i+1].eulerArmUp2 > oriMove[i].eulerArmUp2)
+		//	|| (oriMove[i-1].eulerArmUp3 < oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 < oriMove[i].eulerArmUp3)
+		//	|| (oriMove[i-1].eulerArmUp3 > oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 > oriMove[i].eulerArmUp3)
+		//	|| (oriMove[i-1].eulerArmUp3 < oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 == oriMove[i].eulerArmUp3)
+		//	|| (oriMove[i-1].eulerArmUp3 > oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 == oriMove[i].eulerArmUp3)
+		//	|| (oriMove[i-1].eulerArmUp3 == oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 < oriMove[i].eulerArmUp3)
+		//	|| (oriMove[i-1].eulerArmUp3 == oriMove[i].eulerArmUp3 && oriMove[i+1].eulerArmUp3 > oriMove[i].eulerArmUp3)
+		//	|| (oriMove[i-1].eulerArmDown1 < oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 < oriMove[i].eulerArmDown1)
+		//	|| (oriMove[i-1].eulerArmDown1 > oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 > oriMove[i].eulerArmDown1)
+		//	|| (oriMove[i-1].eulerArmDown1 < oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 == oriMove[i].eulerArmDown1)
+		//	|| (oriMove[i-1].eulerArmDown1 > oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 == oriMove[i].eulerArmDown1)
+		//	|| (oriMove[i-1].eulerArmDown1 == oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 < oriMove[i].eulerArmDown1)
+		//	|| (oriMove[i-1].eulerArmDown1 == oriMove[i].eulerArmDown1 && oriMove[i+1].eulerArmDown1 > oriMove[i].eulerArmDown1)
+		//	|| (oriMove[i-1].eulerArmDown2 < oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 < oriMove[i].eulerArmDown2)
+		//	|| (oriMove[i-1].eulerArmDown2 > oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 > oriMove[i].eulerArmDown2)
+		//	|| (oriMove[i-1].eulerArmDown2 < oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 == oriMove[i].eulerArmDown2)
+		//	|| (oriMove[i-1].eulerArmDown2 > oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 == oriMove[i].eulerArmDown2)
+		//	|| (oriMove[i-1].eulerArmDown2 == oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 < oriMove[i].eulerArmDown2)
+		//	|| (oriMove[i-1].eulerArmDown2 == oriMove[i].eulerArmDown2 && oriMove[i+1].eulerArmDown2 > oriMove[i].eulerArmDown2)
+		//	|| (oriMove[i-1].eulerArmDown3 < oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 < oriMove[i].eulerArmDown3)
+		//	|| (oriMove[i-1].eulerArmDown3 > oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 > oriMove[i].eulerArmDown3)
+		//	|| (oriMove[i-1].eulerArmDown3 < oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 == oriMove[i].eulerArmDown3)
+		//	|| (oriMove[i-1].eulerArmDown3 > oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 == oriMove[i].eulerArmDown3)
+		//	|| (oriMove[i-1].eulerArmDown3 == oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 < oriMove[i].eulerArmDown3)
+		//	|| (oriMove[i-1].eulerArmDown3 == oriMove[i].eulerArmDown3 && oriMove[i+1].eulerArmDown3 > oriMove[i].eulerArmDown3))
+		//{
+		//	++numC;
+		//	cNumTrue[i] = 1;
+		//}
+		for (int j = 0; j < 12; ++j)
 		{
-			++numC;
-			cNumTrue[i] = 1;
+			if((oriMove[i-1].angles[j] < oriMove[i].angles[j] && oriMove[i+1].angles[j] < oriMove[i].angles[j])
+			|| (oriMove[i-1].angles[j] > oriMove[i].angles[j] && oriMove[i+1].angles[j] > oriMove[i].angles[j])
+			|| (oriMove[i-1].angles[j] < oriMove[i].angles[j] && oriMove[i+1].angles[j] == oriMove[i].angles[j])
+			|| (oriMove[i-1].angles[j] > oriMove[i].angles[j] && oriMove[i+1].angles[j] == oriMove[i].angles[j])
+			|| (oriMove[i-1].angles[j] == oriMove[i].angles[j] && oriMove[i+1].angles[j] < oriMove[i].angles[j])
+			|| (oriMove[i-1].angles[j] == oriMove[i].angles[j] && oriMove[i+1].angles[j] > oriMove[i].angles[j]))
+			{
+				++numC;
+				cNumTrue[i] = 1;
+				break;
+			}
 		}
 	}
 }
@@ -212,36 +107,24 @@ float power2(float n)
 // 计算一点到另外两点连成直线的距离
 float getDis(BodyAngles start, BodyAngles end, BodyAngles p) 
 {
-	float term1 = power2(p.rightArmUp - start.rightArmUp);
-	term1 += power2(p.rightArmDown - start.rightArmDown);
-	term1 += power2(p.betweenArms - start.betweenArms);
-	term1 += power2(p.eulerArmUp1 - start.eulerArmUp1);
-	term1 += power2(p.eulerArmUp2 - start.eulerArmUp2);
-	term1 += power2(p.eulerArmUp3 - start.eulerArmUp3);
-	term1 += power2(p.eulerArmDown1 - start.eulerArmDown1);
-	term1 += power2(p.eulerArmDown2 - start.eulerArmDown2);
-	term1 += power2(p.eulerArmDown3 - start.eulerArmDown3);
+	float term1 = 0;
+	for (int i = 0; i < 12; ++i)
+	{
+		term1 += power2(p.angles[i] - start.angles[i]);
+	}
 
-	float term2u = (end.rightArmUp-start.rightArmUp) * (p.rightArmUp-start.rightArmUp);
-	term2u += (end.rightArmDown-start.rightArmDown) * (p.rightArmDown-start.rightArmDown);
-	term2u += (end.betweenArms-start.betweenArms) * (p.betweenArms-start.betweenArms);
-	term2u += (end.eulerArmUp1-start.eulerArmUp1) * (p.eulerArmUp1-start.eulerArmUp1);
-	term2u += (end.eulerArmUp2-start.eulerArmUp2) * (p.eulerArmUp2-start.eulerArmUp2);
-	term2u += (end.eulerArmUp3-start.eulerArmUp3) * (p.eulerArmUp3-start.eulerArmUp3);
-	term2u += (end.eulerArmDown1-start.eulerArmDown1) * (p.eulerArmDown1-start.eulerArmDown1);
-	term2u += (end.eulerArmDown2-start.eulerArmDown2) * (p.eulerArmDown2-start.eulerArmDown2);
-	term2u += (end.eulerArmDown3-start.eulerArmDown3) * (p.eulerArmDown3-start.eulerArmDown3);
+	float term2u = 0;
+	for (int i = 0; i < 12; ++i)
+	{
+		term2u += (end.angles[i]-start.angles[i]) * (p.angles[i]-start.angles[i]);
+	}
 	term2u = power2(term2u);
 
-	float term2d = power2(end.rightArmUp-start.rightArmUp);
-	term2d += power2(end.rightArmDown-start.rightArmDown);
-	term2d += power2(end.betweenArms-start.betweenArms);
-	term2d += power2(end.eulerArmUp1-start.eulerArmUp1);
-	term2d += power2(end.eulerArmUp2-start.eulerArmUp2);
-	term2d += power2(end.eulerArmUp3-start.eulerArmUp3);
-	term2d += power2(end.eulerArmDown1-start.eulerArmDown1);
-	term2d += power2(end.eulerArmDown2-start.eulerArmDown2);
-	term2d += power2(end.eulerArmDown3-start.eulerArmDown3);
+	float term2d = 0;
+	for (int i = 0; i < 12; ++i)
+	{
+		term2d += power2(end.angles[i]-start.angles[i]);
+	}
 
 	float result = sqrt(term1 - term2u/term2d);
 	return result;
@@ -249,15 +132,12 @@ float getDis(BodyAngles start, BodyAngles end, BodyAngles p)
 
 float realDis(int s, int e)
 {
-	return sqrt((oriMove[s].rightArmUp - oriMove[e].rightArmUp) * (oriMove[s].rightArmUp - oriMove[e].rightArmUp)
-		+ (oriMove[s].rightArmDown - oriMove[e].rightArmDown) * (oriMove[s].rightArmDown - oriMove[e].rightArmDown)
-		+ (oriMove[s].betweenArms - oriMove[e].betweenArms) * (oriMove[s].betweenArms - oriMove[e].betweenArms)
-		+ (oriMove[s].eulerArmUp1 - oriMove[e].eulerArmUp1) * (oriMove[s].eulerArmUp1 - oriMove[e].eulerArmUp1)
-		+ (oriMove[s].eulerArmUp2 - oriMove[e].eulerArmUp2) * (oriMove[s].eulerArmUp2 - oriMove[e].eulerArmUp2)
-		+ (oriMove[s].eulerArmUp3 - oriMove[e].eulerArmUp3) * (oriMove[s].eulerArmUp3 - oriMove[e].eulerArmUp3)
-		+ (oriMove[s].eulerArmDown1 - oriMove[e].eulerArmDown1) * (oriMove[s].eulerArmDown1 - oriMove[e].eulerArmDown1)
-		+ (oriMove[s].eulerArmDown2 - oriMove[e].eulerArmDown2) * (oriMove[s].eulerArmDown2 - oriMove[e].eulerArmDown2)
-		+ (oriMove[s].eulerArmDown3 - oriMove[e].eulerArmDown3) * (oriMove[s].eulerArmDown3 - oriMove[e].eulerArmDown3));
+	float res = 0;
+	for(int i = 0; i < 12; ++i)
+	{
+		res += (oriMove[s].angles[i]-oriMove[e].angles[i]) * (oriMove[s].angles[i]-oriMove[e].angles[i]);
+	}
+	return sqrt(res);
 }
 
 // 上层曲线简化
@@ -320,6 +200,7 @@ int curveDown(int s, int e)
 
 void curveMain()
 {
+	speedyPreProcess();
 	preProcess();
 
 	int dir = 1;			// dir = 1代表帧数多， 0代表帧数少
@@ -472,15 +353,19 @@ void curveMain()
 					set<int>::iterator si1 = si;
 					set<int>::iterator si2 = ++si;
 					si--;
-					oriMove[*si1].rightArmDown = (oriMove[*si1].rightArmDown + oriMove[*si2].rightArmDown) / 2.0f;
-					oriMove[*si1].rightArmUp = (oriMove[*si1].rightArmUp + oriMove[*si2].rightArmUp) / 2.0f;
-					oriMove[*si1].betweenArms = (oriMove[*si1].betweenArms + oriMove[*si2].betweenArms) / 2.0f;
-					oriMove[*si1].eulerArmUp1 = (oriMove[*si1].eulerArmUp1 + oriMove[*si2].eulerArmUp1) / 2.0f;
-					oriMove[*si1].eulerArmUp2 = (oriMove[*si1].eulerArmUp2 + oriMove[*si2].eulerArmUp2) / 2.0f;
-					oriMove[*si1].eulerArmUp3 = (oriMove[*si1].eulerArmUp3 + oriMove[*si2].eulerArmUp3) / 2.0f;
-					oriMove[*si1].eulerArmDown1 = (oriMove[*si1].eulerArmDown1 + oriMove[*si2].eulerArmDown1) / 2.0f;
-					oriMove[*si1].eulerArmDown2 = (oriMove[*si1].eulerArmDown2 + oriMove[*si2].eulerArmDown2) / 2.0f;
-					oriMove[*si1].eulerArmDown3 = (oriMove[*si1].eulerArmDown3 + oriMove[*si2].eulerArmDown3) / 2.0f;
+					for(int k = 0; k < 12; ++k)
+					{
+						oriMove[*si1].angles[k] = (oriMove[*si1].angles[k] + oriMove[*si2].angles[k]) / 2.0f;
+					}
+					//oriMove[*si1].rightArmDown = (oriMove[*si1].rightArmDown + oriMove[*si2].rightArmDown) / 2.0f;
+					//oriMove[*si1].rightArmUp = (oriMove[*si1].rightArmUp + oriMove[*si2].rightArmUp) / 2.0f;
+					//oriMove[*si1].betweenArms = (oriMove[*si1].betweenArms + oriMove[*si2].betweenArms) / 2.0f;
+					//oriMove[*si1].eulerArmUp1 = (oriMove[*si1].eulerArmUp1 + oriMove[*si2].eulerArmUp1) / 2.0f;
+					//oriMove[*si1].eulerArmUp2 = (oriMove[*si1].eulerArmUp2 + oriMove[*si2].eulerArmUp2) / 2.0f;
+					//oriMove[*si1].eulerArmUp3 = (oriMove[*si1].eulerArmUp3 + oriMove[*si2].eulerArmUp3) / 2.0f;
+					//oriMove[*si1].eulerArmDown1 = (oriMove[*si1].eulerArmDown1 + oriMove[*si2].eulerArmDown1) / 2.0f;
+					//oriMove[*si1].eulerArmDown2 = (oriMove[*si1].eulerArmDown2 + oriMove[*si2].eulerArmDown2) / 2.0f;
+					//oriMove[*si1].eulerArmDown3 = (oriMove[*si1].eulerArmDown3 + oriMove[*si2].eulerArmDown3) / 2.0f;
 
 					bestAns--;
 					realKeyFrames.erase(si2);
