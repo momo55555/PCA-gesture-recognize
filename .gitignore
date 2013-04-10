@@ -34,3 +34,5 @@ ipch/
 #Ignore files build by Visual Studio
 ipch/重采样-8685569c/pca ges rec-124444b9.ipch
 PCA ges rec.sdf
+*.orig
+*.ipch
