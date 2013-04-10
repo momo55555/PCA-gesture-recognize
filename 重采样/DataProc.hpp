@@ -78,7 +78,7 @@ void trigger()
 // 打印收集的姿态骨骼帧信息，因为考虑到基本都是采集单人骨骼数据所以没有保存用户信息，处理时已单人数据为准
 void printGes(int i)
 {
-	ofstream fout("C:/Users/rudysnow/Desktop/WaveGes1.txt");
+	ofstream fout("C:/Users/rudysnow/Desktop/CarrierGes1.txt");
 	vector<Frame>::iterator vi;
 
 	int n = gesture[i].size();
@@ -101,7 +101,7 @@ void printGes(int i)
 // 打印收集的用于分层曲线算法的骨骼夹角信息，因为考虑到基本都是采集单人骨骼数据所以没有保存用户信息，处理时以单人数据为准
 void printMove(int i)
 {
-	ofstream fout("C:/Users/rudysnow/Desktop/WaveMove1.txt");
+	ofstream fout("C:/Users/rudysnow/Desktop/CarrierMove1.txt");
 	vector<BodyAngles>::iterator vi;
 	
 	int n = movement[i].size();

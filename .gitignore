@@ -27,6 +27,10 @@ _ReSharper*/
 [Tt]est[Rr]esult*
 *.vssscc
 $tf*/
+*.opensdf
+ipch/
+*.sdf
 #ignore thumbnails created by windows
 #Ignore files build by Visual Studio
-*.opensdf
+ipch/重采样-8685569c/pca ges rec-124444b9.ipch
+PCA ges rec.sdf
