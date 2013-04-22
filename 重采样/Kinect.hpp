@@ -5,6 +5,10 @@
 #include <XnModuleCppInterface.h>
 #include <XnTypes.h>
 #include <iostream>
+#include <fstream>
+#include <vector>
+#include <set>
+#include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -17,7 +21,7 @@ using namespace std;
 */
 
 /*
-    各关节点对应的数组位置（需要减1， 左右相反）
+	Array index of each joints(Reversed left and right mark, and minus 1 each time use them)
     XN_SKEL_HEAD = 1, XN_SKEL_NECK = 2,
     XN_SKEL_TORSO = 3, XN_SKEL_WAIST = 4,
     XN_SKEL_LEFT_COLLAR = 5, XN_SKEL_LEFT_SHOULDER = 6,
@@ -32,7 +36,7 @@ using namespace std;
     XN_SKEL_RIGHT_ANKLE =23, XN_SKEL_RIGHT_FOOT =24
 */
 
-// some global variables
+// Some global variables
 xn::Context context;
 xn::UserGenerator userGenerator;
 XnCallbackHandle userCBHandle;
@@ -48,28 +52,28 @@ bool newData;
 bool closeFlag;
 int notify = 0;
 
-// callback function of user generator: new user
+// Callback function of user generator: new user
 void XN_CALLBACK_TYPE NewUser(xn::UserGenerator& generator, XnUserID user, void* pCookie)
 {
-	if(generator.GetNumberOfUsers() >= 2) return;
+	if (generator.GetNumberOfUsers() >= 2) return;
 	cout << "New user identified: " << user << endl;
 	generator.GetSkeletonCap().RequestCalibration( user, FALSE );
 }
 
-// callback function of user generator: lost user
+// Callback function of user generator: lost user
 void XN_CALLBACK_TYPE LostUser(xn::UserGenerator& generator, XnUserID user, void* pCookie)
 {
 	cout << "User " << user << " lost" << endl;
 	currentUsers[user] = 0;
 }
 
-// callback function of skeleton: calibration start
+// Callback function of skeleton: calibration start
 void XN_CALLBACK_TYPE CalibrationStart(xn::SkeletonCapability& skeleton, XnUserID user, void* pCookie)
 {
 	cout << "Calibration start for user " << user << endl;
 }
 
-// callback function of skeleton: calibration end
+// Callback function of skeleton: calibration end
 void XN_CALLBACK_TYPE CalibrationEnd(xn::SkeletonCapability& skeleton, XnUserID user, XnCalibrationStatus calibrationError, void* pCookie)
 {
 	cout << "Calibration complete for user " << user << ", ";
@@ -90,7 +94,7 @@ int setDataEnvironment()
 {
 	context.Init();
 
-	if(userGenerator.Create(context) != XN_STATUS_OK) return 0;
+	if (userGenerator.Create(context) != XN_STATUS_OK) return 0;
 	// Register callback functions of user generator
 	userGenerator.RegisterUserCallbacks(NewUser, LostUser, NULL, userCBHandle);
 
@@ -103,7 +107,6 @@ int setDataEnvironment()
 
 	context.StartGeneratingAll();
 
-	//cout << "Set Environment done" << endl;
 	return 1;
 }
 
@@ -112,24 +115,26 @@ void dataReceive()
 	notify = 0;
 	while (true)
 	{
-		if(closeFlag == 1)
+		if (closeFlag == 1)
 		{
 			return;
 		}
 		context.WaitAndUpdateAll();
 		memset(currentUsers, 0, sizeof(currentUsers));
-		// get users
+
+		// Get users
 		userCounts = userGenerator.GetNumberOfUsers();
 		if (userCounts > 0)
 		{
 			if(notify == 1) continue;
-			//通知新数据收到
+
+			// Collecting new data
 			newData = 1;
 			XnUserID* userID = new XnUserID[userCounts];
 			userGenerator.GetUsers(userID, userCounts);
 			for (int i = 0; i < userCounts; ++i)
 			{
-				//if is tracking skeleton
+				//if is tracking user[i]'s skeleton
 				if (skeletonCap.IsTracking(userID[i]))
 				{
 					currentUsers[userID[i]] = 1;

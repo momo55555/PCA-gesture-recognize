@@ -38,10 +38,10 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>C:\Libs\armadillo-3.800.1\armadillo-3.800.1\include;C:\Libs\OpenGLUT-0.6.3;C:\Libs\glew-1.8.0-win32\include;C:\Libs\GLTools\include;C:\Program Files\OpenNI\Include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include</IncludePath>
+    <IncludePath>C:\Libs;C:\Libs\armadillo-3.800.1\armadillo-3.800.1\include;C:\Libs\OpenGLUT-0.6.3;C:\Libs\glew-1.8.0-win32\include;C:\Libs\GLTools\include;C:\Program Files\OpenNI\Include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <LibraryPath>C:\Libs\lapack-3.4.2;C:\Libs\OpenGLUT-0.6.3;C:\Libs\glew-1.8.0-win32\lib;C:\Libs\GLTools;C:\Program Files\OpenNI\Lib;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib;$(FrameworkSDKDir)\lib</LibraryPath>
+    <LibraryPath>C:\Users\rudysnow\Downloads\ia32\lib;C:\Libs\itpp;C:\Libs\lapack-3.4.2;C:\Libs\OpenGLUT-0.6.3;C:\Libs\glew-1.8.0-win32\lib;C:\Libs\GLTools;C:\Program Files\OpenNI\Lib;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib;$(FrameworkSDKDir)\lib</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -52,7 +52,8 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>libblas.lib;liblapack.lib;OpenGLUT_static.lib;OpenGLUT.lib;gltools.lib;glew32.lib;glew32mx.lib;glew32mxs.lib;glew32s.lib;OpenNI.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>mkl_c_dll.lib;itpp_debug.lib;libblas.lib;liblapack.lib;OpenGLUT_static.lib;OpenGLUT.lib;gltools.lib;glew32.lib;glew32mx.lib;glew32mxs.lib;glew32s.lib;OpenNI.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreSpecificDefaultLibraries>uuid.lib</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -73,8 +74,10 @@
     <ClInclude Include="Curve.hpp" />
     <ClInclude Include="DataProc.hpp" />
     <ClInclude Include="DrawSkeleton.hpp" />
+    <ClInclude Include="Ica.hpp" />
     <ClInclude Include="Kinect.hpp" />
     <ClInclude Include="pca.hpp" />
+    <ClInclude Include="RecICA.h" />
     <ClInclude Include="Recognize.hpp" />
     <ClInclude Include="Speed.hpp" />
     <ClInclude Include="Train.hpp" />

@@ -1,79 +1,55 @@
 #ifndef _SPEED_H
 #define _SPEED_H
 
-#include <time.h>
-#include <set>
+// This Header File can only handle single-skeleton data, now there's no obvious need for multi-skeleton data processing, so I did not add that function
+
 #include "DataProc.hpp"
 
 /*
-    Time: 01-03-2013
+    Time: 04-10-2013
     @Author: Rudy Snow
-    Description: 基于分层曲线简化的关键帧提取算法
+	Description: Improve hierarchical curve simplification algorithm using velocity threshold method
 */
 
 using namespace std;
 
-// 要提取的关键帧帧数
-#define KEY_FRAMES 60
+// Frame numbers of key frames to extract
+#define KEY_FRAMES 75
 
-vector<BodyAngles> oriMove;			// 姿态源数据
-vector<int> subset;			// 曲线两点之间的子集点
-vector<Velocity> velVec;
-set<int> keyFrames;			// 迭代所得关键帧
-set<int> realKeyFrames;		// 对迭代所得的“关键帧”进行进一步插值
-int numOfFrames = 0;			// 当前姿态数据的帧数
-int* pairs;			// 记录分层曲线中各点的连接关系 
-int* c_num;			// 记录已提取作为关键帧的帧信息
-int* cNumTrue;		// 用于迭代时保存原始姿态曲线极值点信息
-float delta = 1.0f;		// 分层曲线算法中判断是否将点加入曲线集合的阈值
-float dDeltaU = 0.1f;	// 阈值的增减幅度
+vector<BodyAngles> oriMove;		// Original formed gesture data 
+vector<int> subset;			// Subset used for hierarchical curve simplification algorithm
+vector<Velocity> velVec;		// Vector container to hold the velocity information
+set<int> keyFrames;		// Set container to hold the original key frame information
+set<int> realKeyFrames;		// Set container to hold the interpolated key frame information
+int numOfFrames = 0;			// Record frame numbers in current gesture
+int* pairs;			// Record connection relationship between points for hierarchical curve simplification algorithm
+int* c_num;			// Record index of frames which has been chosen as key frames
+int* cNumTrue;		// Save the original c_num Array after pre-process phase
+float delta = 1.0f;		// Threshold to determine if add points to key frame set
+// Threshold to control the vibration of delta
+float dDeltaU = 0.1f;
 float dDeltaD = 0.1f;
-int numC;
-float aveVel[4] = {0};
+int numC;		// Record the element number of c_num array
+float aveVel[4] = {0};		// Array to hold average velocity for four parts of both arms
 
-// 从保存了骨骼夹角数据的文件中读取
-//void readFromFile()
-//{
-//	ifstream fin("C:/Users/rudysnow/Desktop/WaveMove2.txt");
-//	numOfFrames = 0;
-//	XnFloat a1, a2, a3, x1, y1, z1, x2, y2, z2;
-//	while (fin >> a1 >> a2 >> a3 >> x1 >> y1 >> z1 >> x2 >> y2 >> z2)
-//	{
-//		BodyAngles b;
-//
-//		b.rightArmUp = a1;
-//		b.rightArmDown = a2;
-//		b.betweenArms = a3;
-//		b.eulerArmUp1 = x1;
-//		b.eulerArmUp2 = y1;
-//		b.eulerArmUp3 = z1;
-//		b.eulerArmDown1 = x2;
-//		b.eulerArmDown2 = y2;
-//		b.eulerArmDown3 = z2;
-//
-//		oriMove.push_back(b);
-//		++numOfFrames;
-//	}
-//	fin.close();
-//	pairs = new int[numOfFrames];			// 记得要delete！
-//	c_num = new int[numOfFrames];
-//	cNumTrue = new int[numOfFrames];
-//}
-
-// 从保存原始姿态数据的文件中读取并转化为骨骼夹角
-void readOriginalFile()
+// Reform gesture data to arm-angle form
+void readOriginalFile(char* fileName)
 {
-	ifstream fin("C:/Users/rudysnow/Desktop/HorizontalGes1.txt");
+	ifstream fin(fileName);
 	numOfFrames = 0;
+
+	// Variables Blablablah...
 	XnPoint3D torso, head, righthand, rightelbow, rightshoulder, lefthand, leftelbow, leftshoulder;
+	XnFloat x, y, z;
+	XnFloat px[4] = {0}, py[4] = {0}, pz[4] = {0};
 	int flag = 0;
 	int flagCalVec = 0;
 	int timer = 0;
-	XnFloat x, y, z;
-	XnFloat px[4] = {0}, py[4] = {0}, pz[4] = {0};
-	velVec.clear();
-	float totalVel[4] = {0};
 	int numVel = 0;
+	float totalVel[4] = {0};
+
+	velVec.clear();
+	
 	while (true)
 	{
 		++timer;
@@ -84,7 +60,8 @@ void readOriginalFile()
 				flag = 1;
 				break;
 			}
-			// 取得当前帧几个关键点的坐标
+
+			// Get coordinate value of needed joint points
 			if (i+1 == XN_SKEL_TORSO)
 			{
 				torso.X = x;
@@ -133,9 +110,10 @@ void readOriginalFile()
 				leftshoulder.Y = y;
 				leftshoulder.Z = z;
 			}
-
 		}
-		if(flag == 1) break;
+
+		if (flag == 1) break;
+
 		if (flagCalVec == 0)
 		{
 			flagCalVec = 1;
@@ -152,7 +130,8 @@ void readOriginalFile()
 			py[3] = rightelbow.Y;
 			pz[3] = rightelbow.Z;
 		}
-		if(timer == 6)
+		// Calculate velocity(6 frames duration)
+		if (timer == 6)
 		{
 			timer = 0;
 			Velocity vel;
@@ -181,7 +160,7 @@ void readOriginalFile()
 			totalVel[3] += vel.vel[3];
 		}
 
-		// 通过源数据计算右手与身体的夹角
+		// Calculate angels in x-y, x-z, y-z faces
 		Vector3f rootXY(torso.X - head.X, torso.Y - head.Y, 0);
 		Vector3f rootXZ(torso.X - head.X, 0, torso.Z - head.Z);
 		Vector3f rootYZ(0, torso.Y - head.Y, torso.Z - head.Z);
@@ -197,6 +176,7 @@ void readOriginalFile()
 		Vector3f leftArmDownXY(leftelbow.X - lefthand.X, leftelbow.Y - lefthand.Y, 0);
 		Vector3f leftArmDownXZ(leftelbow.X - lefthand.X, 0, leftelbow.Z - lefthand.Z);
 		Vector3f leftArmDownYZ(0, leftelbow.Y - lefthand.Y, leftelbow.Z - lefthand.Z);
+
 		BodyAngles b;
 		b.angles[0] = angle(rightArmUpXY, rootXY);
 		b.angles[1] = angle(rightArmUpXZ, rootXZ);
@@ -214,7 +194,9 @@ void readOriginalFile()
 
 		numOfFrames++;
 	}
-	if(timer != 0)
+
+	// Add last frame' velocity
+	if (timer != 0)
 	{
 		Velocity vel;
 		vel.frame = numOfFrames - 1;
@@ -236,21 +218,24 @@ void readOriginalFile()
 	aveVel[3] = totalVel[3] / float(numVel);
 
 	fin.close();
-	pairs = new int[numOfFrames];			// 记得要delete！
+	pairs = new int[numOfFrames];			// Remember to delete!
 	c_num = new int[numOfFrames];
 	cNumTrue = new int[numOfFrames];
 }
 
+// Add frames which has fairly lower velocity to pre-calculated key frame set.(This idea is raised by Mrs.Li Lin, but the effect is not so obvious as she imagined)
 void speedyPreProcess()
 {
 	memset(cNumTrue, 0, numOfFrames * sizeof(int));
 	numC = 0;
+
 	vector<Velocity>::iterator vi;
-	for(vi = velVec.begin(); vi != velVec.end(); ++vi)
+	
+	for (vi = velVec.begin(); vi != velVec.end(); ++vi)
 	{
-		for(int i = 0; i < 4; ++i)
+		for (int i = 0; i < 4; ++i)
 		{
-			if(vi->vel[i] < aveVel[i])
+			if (vi->vel[i] < aveVel[i])
 			{
 				++numC;
 				cNumTrue[vi->frame] = 1;
